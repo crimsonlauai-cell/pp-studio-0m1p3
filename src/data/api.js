@@ -1,6 +1,19 @@
 import axios from 'axios'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL
+const TOKEN_KEY = 'pp_access_token'
+
+export function getToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || '' } catch { return '' }
+}
+
+export function setToken(token) {
+  try { localStorage.setItem(TOKEN_KEY, token) } catch {}
+}
+
+export function clearToken() {
+  try { localStorage.removeItem(TOKEN_KEY) } catch {}
+}
 
 export function buildPrompt({ background, expression, pose, outfit, accessory, photoStyle, customPrompt }) {
   const parts = [
@@ -20,12 +33,23 @@ export function buildPrompt({ background, expression, pose, outfit, accessory, p
   return parts.join(' ')
 }
 
-// POST to GAS using text/plain to avoid CORS preflight
-async function gasPost(payload) {
-  const res = await axios.post(GAS_URL, JSON.stringify(payload), {
+// POST to GAS using text/plain to avoid CORS preflight; every request carries the access token
+async function gasPost(payload, token = getToken()) {
+  const res = await axios.post(GAS_URL, JSON.stringify({ ...payload, token }), {
     headers: { 'Content-Type': 'text/plain' },
   })
+  // Wrong or revoked token: forget it and go back to the passcode screen
+  if (res.data?.error === 'unauthorized' && payload.action !== 'verify') {
+    clearToken()
+    window.location.reload()
+  }
   return res.data
+}
+
+// Check a passcode before storing it
+export async function verifyToken(token) {
+  const data = await gasPost({ action: 'verify' }, token)
+  return !!data?.success
 }
 
 // Generate image via GAS middleware (hides API key from browser)
@@ -62,6 +86,6 @@ export async function saveToGoogleDrive(base64, mimeType, filename) {
 // Fetch gallery from Google Drive via GAS
 export async function fetchGallery() {
   if (!GAS_URL) return []
-  const res = await axios.get(`${GAS_URL}?action=getGallery`)
-  return res.data?.images || []
+  const data = await gasPost({ action: 'getGallery' })
+  return data?.images || []
 }

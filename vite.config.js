@@ -3,5 +3,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/pet-photo-creator/',
+  // Relative base + HashRouter: the build works under any repo name
+  base: './',
 })
